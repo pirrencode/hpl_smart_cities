@@ -1,3 +1,4 @@
 smc_name,smc_area,smc_population,smc_active_workforce_mass,smc_gdp_current,smc_emissions,public_transport_price,current_commute_speed_kmh,current_commute_time_min,hyperloop_route_length_km,hyperloop_speed_trl6_kmh,hyperloop_speed_trl9_kmh,current_exports,current_imports,current_freight_speed,citizen_commute_time,smc_nodes
-Glasgow,175,635000,325000,2.59,400000,10.35,30,60,10,450,1223,4790000,46000000,90,50.5,25
-Berlin,891.8,3748148,2000000,5.35,500000,9.5,40,60,10,450,1223,10000000,70000000,90,400,55
+Glasgow,175,635000,325000,2.59,400000,10.35,39,60,10,450,1223,4790000,46000000,90,50.5,27
+Berlin,891.8,3748148,2014000,5.35,500000,9.5,48,60,90,390,1223,1390000000,1760000000,90,100,35
+Busan,768,3400000,1670000,91,1800000,4.3,65,60,120,390,1223,52000000000,48100000000,90,90,42
