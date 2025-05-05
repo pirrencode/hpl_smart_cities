@@ -69,7 +69,6 @@ and prints the main columns to stdout.
 Dependencies: numpy, pandas, statsmodels.
 """
 
-
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
@@ -127,8 +126,6 @@ def calculate_smc_metrics(df_in: pd.DataFrame) -> pd.DataFrame:
         # ------------ grid size ------------------------------
         smc_grid = int(area / SECTOR_AREA_KM2)
 
-        # =====================================================
-        # === NODES BLOCK BEGIN ===============================
         # baseline nodes
         nodes_density_base = row['smc_nodes']
         nodes_total_base   = nodes_density_base * area
@@ -144,8 +141,6 @@ def calculate_smc_metrics(df_in: pd.DataFrame) -> pd.DataFrame:
         nodes_density_hl  = (nodes_total_base + nodes_added_total) / area
         nodes_per_grid_base = nodes_density_base * SECTOR_AREA_KM2
         nodes_per_grid_hl   = nodes_density_hl  * SECTOR_AREA_KM2
-        # === NODES BLOCK END =================================
-        # =====================================================
 
         # ------------ baseline trade & speed -----------------
         x0, m0  = row['current_exports'], row['current_imports']
@@ -259,56 +254,67 @@ def make_ppml_frame(df_wide: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------
 # 4. PPML
 # ---------------------------------------------------------------
-def apply_ppml(df_long: pd.DataFrame) -> pd.DataFrame:
-    df = df_long.copy()
-    df['gdp_pos'] = df['gdp'].clip(lower=1)
+def apply_ppml_city(df_city: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fit / apply PPML **only on the three rows** (baseline, TRL6, TRL9)
+    of a single city and return its predictions.
+    """
+    d = df_city.copy()
+    d['gdp_pos'] = d['gdp'].clip(lower=1)
 
     if ESTIMATE_PPML:
-        mod = smf.glm("gdp_pos ~ np.log(distance_km) + "
-                      "np.log(time_red_min+1) + hl_dummy",
-                      data=df,
-                      family=sm.families.Poisson(sm.families.links.log())
-                     ).fit(cov_type='HC0')
-        print(summary_col([mod], stars=True))
-        df['gdp_ppml_pred'] = mod.predict(df)
+        model = smf.glm("gdp_pos ~ np.log(distance_km) + "
+                        "np.log(time_red_min + 1) + hl_dummy",
+                        data=d,
+                        family=sm.families.Poisson(sm.families.links.log())
+                       ).fit(disp=0)
+        print(summary_col([model], stars=True))
+        d['gdp_ppml_pred'] = model.predict(d)
     else:
         xb = (BETA_FIXED['const']
-              + BETA_FIXED['ln_dist']*np.log(df['distance_km'])
-              + BETA_FIXED['ln_time']*np.log(df['time_red_min']+1)
-              + BETA_FIXED['hl_dummy']*df['hl_dummy'])
-        df['gdp_ppml_pred'] = np.exp(xb)
+              + BETA_FIXED['ln_dist'] * np.log(d['distance_km'])
+              + BETA_FIXED['ln_time'] * np.log(d['time_red_min'] + 1)
+              + BETA_FIXED['hl_dummy'] * d['hl_dummy'])
+        d['gdp_ppml_pred'] = np.exp(xb)
 
-    return df[['smc_name','scenario','gdp_ppml_pred']]
+    return d[['smc_name', 'scenario', 'gdp_ppml_pred']]
 
 # ---------------------------------------------------------------
 # 5. MAIN
 # ---------------------------------------------------------------
 if __name__ == "__main__":
     df_input = pd.read_csv("smc_input.csv")
+    wide = calculate_smc_metrics(df_input)
+    long = make_ppml_frame(wide)
 
-    wide  = calculate_smc_metrics(df_input)
-    long  = make_ppml_frame(wide)
-    preds = apply_ppml(long)
+    # ---------- PPML ----------------
+    preds_list = []
+    for city, panel in long.groupby('smc_name'):
+        preds_list.append(apply_ppml_city(panel))
+
+    preds = pd.concat(preds_list, ignore_index=True)
 
     preds_wide = (preds.pivot(index='smc_name', columns='scenario',
                               values='gdp_ppml_pred')
-                         .rename(columns={'TRL6':'gdp_ppml_trl6',
-                                          'TRL9':'gdp_ppml_trl9'})
+                         .rename(columns={'TRL6': 'gdp_ppml_trl6',
+                                          'TRL9': 'gdp_ppml_trl9'})
                          .reset_index())
 
     wide_ppml = (wide.merge(preds_wide, on='smc_name', how='left')
                  .assign(smc_gdp_trl6_final=lambda d:
-                             d['gdp_ppml_trl6'] +
-                             (d['net_trade_trl6'] - d['current_net_trade']),
+                             d['gdp_ppml_trl6']
+                           + (d['net_trade_trl6'] - d['current_net_trade']),
                          smc_gdp_trl9_final=lambda d:
-                             d['gdp_ppml_trl9'] +
-                             (d['net_trade_trl9'] - d['current_net_trade']))
-                 .drop(columns=['gdp_ppml_trl6','gdp_ppml_trl9'])
+                             d['gdp_ppml_trl9']
+                           + (d['net_trade_trl9'] - d['current_net_trade']))
+                 .drop(columns=['gdp_ppml_trl6', 'gdp_ppml_trl9'])
                  .assign(smc_gdp_trl6_final_diff=lambda d:
-                             100*(d['smc_gdp_trl6_final']-d['smc_gdp_current'])
+                             100 * (d['smc_gdp_trl6_final']
+                                    - d['smc_gdp_current'])
                              / d['smc_gdp_current'],
                          smc_gdp_trl9_final_diff=lambda d:
-                             100*(d['smc_gdp_trl9_final']-d['smc_gdp_current'])
+                             100 * (d['smc_gdp_trl9_final']
+                                    - d['smc_gdp_current'])
                              / d['smc_gdp_current'])
                  .round(2))
 
@@ -327,4 +333,3 @@ if __name__ == "__main__":
             'smc_nodes_per_grid_with_hl','smc_nodes_increase_total']
     wide_ppml[cols].to_csv("smart_city_metrics_output_ppml.csv", index=False)
     print(wide_ppml[cols])
-
