@@ -1,0 +1,49 @@
+@startuml
+interface StorageInterface {
+    +load_tasks() : List<Task>
+    +save_tasks(tasks: Iterable<Task>) : None
+}
+
+class CSVStorage {
+    -filename: str
+    +load_rows() : List[Dict[str,str]]
+    +save_rows(rows: Iterable[Dict[str,str]]) : None
+    +load_tasks() : List<Task>
+    +save_tasks(tasks: Iterable<Task>) : None
+}
+
+class CSVTaskStorage {
+}
+
+StorageInterface <|.. CSVStorage
+CSVStorage <|-- CSVTaskStorage
+
+interface Filterable {
+    +filter_tasks(predicate: Callable[[Task], bool]) : List[Task]
+}
+
+class TodoManager {
+    +storage: StorageInterface
+    +tasks: List[Task]
+    +load() : None
+    +save() : None
+    +add_task(title: str, description: str = "", due_date=None) : Task
+    +mark_complete(task_id: int) : bool
+    +filter_tasks(predicate: Callable[[Task], bool]) : List[Task]
+    +list_tasks() : List[Task]
+}
+
+Filterable <|.. TodoManager
+TodoManager --> StorageInterface
+TodoManager --> "*" Task
+
+class Task {
+    +id: int
+    +title: str
+    +description: str
+    +completed: bool
+    +due_date: Optional[datetime]
+    +to_row() : Dict[str, str]
+    +from_row(row: Dict[str, str]) : Task
+}
+@enduml
